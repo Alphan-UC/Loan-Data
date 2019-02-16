@@ -1,0 +1,200 @@
+---
+title: 'Lending Club Loan Project: Variable Selection For Interest Rate Model'
+author: "Alpha N."
+date: "12/20/2018"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+ This is a complete but preliminary assessment of Lending Club loan data. This exercise is designed to identify the main variables that are used in determining the interest rate to charge borrowers. It could also benefit anyone trying to replicate the Lending Club assessment model.
+
+###Layout/Plan:
+
+1.Clean data (~50-60% of work):
+
+    -Remove NA columns and rows
+    -Remove all columns obviously not necessary/repetitive in our analysis 
+    -Create separate dataframes of 10,000 rows randomly selected from data 
+    -These samples are to be used for training and prediction
+    
+2.Fit model for all variables (~25% of work):
+
+    -Study residuals
+    -Analyze with ANOVA(preliminary)
+
+3.Conduct AIC via step function to choose model (~5-10% of work):
+
+    -Compare proposed AIC models
+    -Make any adjustments necessary
+
+4.Evaluate final model using a prediction function(~10-15%)
+
+
+###Summary of Findings:
+
+  Overall, investors interested in crowdfunding with Lending Club should be advised that in deciding the interest rate to charge borrowers (and therefore determining the investors' return on investment), Lending Club will consider the loan amount, term, credit grade and income verification status (i.e is the declared income actually true) the most. 
+  This is probably reassuring because it covers the headline stuff. However, if the usual red flags like revolving account balances, total accounts, debt to income ratio, delinquency in the last two years are important to the investor, then Lending Club may not be the best place to invest because those do not seem to have a large effect on the interest rate decision. This may be in part because people with those were probably not approved in the first place.
+  
+  
+###Cleaning the Data
+
+1.Load Data and dictionary terms. Have a cursory look
+
+```{r}
+projectpath <- "/Users/alpha/Documents/Loan Data/"
+lendingdata<- read.csv(paste(projectpath,'Loan.csv',sep = '/'), header=TRUE) #Original file is 396MB
+lendingdict<- read.csv(paste(projectpath, 'LCDataDictionary.csv',sep = '/'), header = TRUE)
+names(lendingdata)
+dim(lendingdata)
+```
+
+
+2.Clean up the data AND create separate dataframes of cleaned data. Preserve data forms as you go
+
+```{r}
+lendingdata <- lendingdata[,-c(48:74)]
+drops <- c("last_pymnt_d","initial_list_status", "mths_since_last_record","mths_since_last_delinq",
+           "desc", "url","title", "pymnt_plan", "emp_title","id", "member_id", "issue_d", "addr_state") #identify columns we do not need in our analysis
+relevent_loan_data <- lendingdata[ , !(names(lendingdata) %in% drops)] #take out columns not needed
+dim(relevent_loan_data)
+```
+
+
+3.Create pre-disbursement dataframe. This is all the information available before loan is disbursed to borrower. Omit NA and save CSV file for future use
+
+```{r}
+drop_after_data<- c("installment","funded_amnt", "funded_amnt_inv", "loan_status", "total_pymnt", "total_pymnt_inv", "total_rec_prncp", "total_rec_int", "tot_rec_late_fee","recoveries", "collection_recovery_fee", "last_pymnt_amnt",
+                    "out_prncp_inv", "out_prncp", "total_rec_late_fee")
+pre_loan_data<- relevent_loan_data [,!(names(relevent_loan_data ) %in% drop_after_data)] #select data before loan given
+pre_loan_data<- na.omit(pre_loan_data)
+dim(pre_loan_data)
+write.csv(pre_loan_data, 'Pre_Loan_Data_Large.csv') # File is now 133MB
+```
+
+
+4.Randomly select samples of 10,000 of 887,379 rows to reduce computation time. Sample size is ideal for local machine. Repeat NA omission and explicitly use data.frame for good measure. Save CSV file for future use. Please note that due to the large volume of data, we do not need to impute any data with missing variables. This is not necessary for the scope of this project. Instead, we will select use observations(rows) that are complete.
+
+```{r}
+library(dplyr)
+pre_loan_data_random<- sample_n(pre_loan_data, 10000) # load dplyr for sample_n to work
+pre_loan_data_random<- na.omit(pre_loan_data_random) #remove NA cells
+pre_loan_data_random<- data.frame(pre_loan_data_random)
+dim(pre_loan_data_random)
+write.csv(pre_loan_data_random, 'Pre_Loan_Data_Sample1.csv')#Final file is 1.5MB!!
+```
+
+```{r}
+pre_loan_data_random2<- sample_n(pre_loan_data, 10000) 
+pre_loan_data_random2<- na.omit(pre_loan_data_random2) #remove NA cells
+pre_loan_data_random2<- data.frame(pre_loan_data_random2)
+dim(pre_loan_data_random2)
+write.csv(pre_loan_data_random2, 'Pre_Loan_Data_Sample2.csv') #Also 1.5MB
+```
+
+
+###Fitting the Full Model
+
+5.Fit all variables available
+
+```{r}
+model_all<- lm(int_rate ~ ., data = pre_loan_data_random, na.action = na.exclude) #This model takes a long time to run due to all the variables
+plot(model_all$residuals, ylim = c(-5,5)) 
+plot(density(model_all$residuals), xlim=c(-5,5))
+
+#plots residuals on the Y axis and fitted values on the X axis.
+```
+
+
+  Residuals appear concentrated at the center. The good news here is that the model works as expected - the density plot suggests normality as well. It is a little concerning that that there is a slight negative skew on the residuals. That may need a little more analysis. Still, most of our variance is where we want it to be for our purposes - around zero.
+
+
+6.Test of relative significance with ANOVA to help trim the model to only efficient variables
+
+```{r}
+summary(model_all)$r.squared
+anova(model_all)
+```
+
+
+  From the ANOVA comparison above, it appears loan amount, term, grade, and subgrade have the biggest bearing on our data. We need to trim our model accordingly.
+
+  Notice that income verification status has a greater variance on interest rate than actual income. The usual suspects - revolving account balances, total accounts, debt to income ratio, delinquency in the last two years - all seem not to have that large of an effect, comparatively speaking. It is possible that there is a survival bias i.e what we have here are people who were approved already, so the data above may already be favorable.
+
+
+###Variable Selection for Model
+
+7.Use forward and backward AIC
+
+```{r}
+step(model_all, direction = "forward")$AIC #output narrowed down to prevent massive multi-page printout
+step(model_all, direction = "backward")
+```
+
+
+  It appears the best model is the one that is suggested by backward selection, but without 'verification status.' The forward and backward methods do not yield very different results though
+
+8.Use the AIC model suggested by the step function
+
+```{r}
+aic_model_forward<- lm(int_rate ~ loan_amnt + term + grade + sub_grade + emp_length + 
+                         home_ownership + annual_inc + verification_status + purpose + 
+                         zip_code + dti + delinq_2yrs + earliest_cr_line + inq_last_6mths + 
+                         open_acc + pub_rec + revol_bal + revol_util + total_acc, data = pre_loan_data_random)
+
+aic_model_backward<- lm(int_rate ~ loan_amnt + term + grade + sub_grade + emp_length + 
+                          home_ownership + annual_inc + purpose + 
+                          zip_code + dti + delinq_2yrs + earliest_cr_line + inq_last_6mths + 
+                          open_acc + pub_rec + revol_bal + revol_util + total_acc, data = pre_loan_data_random) #takes out "verification status"
+
+summary(aic_model_forward)$r.squared
+summary(aic_model_backward)$r.squared
+
+```
+
+
+
+9.Compare Models AIC models
+
+```{r}
+anova(aic_model_forward,aic_model_backward) #So it appears we will go with the backward model
+```
+
+
+  Confirming our interpretation of the AIC numbers, an ANOVA comparison of both models confirms the backward model to be marginally better.
+
+
+10.Compare AIC model with original model
+
+```{r}
+anova(model_all,aic_model_backward) 
+```
+
+
+  In the same vein, variable selection not only results in a more efficient model, but the predictive value is also increased relative to the original model, 'model_all.'
+
+
+###Using our model for prediction 
+
+11.Preliminary model validation: now let us use our model to predict interest rates for the second sample(i.e out-of-sample). This is a preliminary look at the model's quality. Please note that model quality testing is a far more extensive task beyond the scope of this project.
+
+```{r}
+prediction <- predict(aic_model_backward, data = pre_loan_data_random2, na.action = na.action)
+raw_data_rate<- c(summary(pre_loan_data_random2$int_rate))
+predicted_rate<- c(summary(prediction))
+rbind(raw_data_rate, predicted_rate) #summary comparison
+sd(pre_loan_data_random2$int_rate)
+sd(prediction)
+
+```
+
+
+
+###Final Thoughts and Future Work
+
+  As you can see, the SD and the summary all appear to be very close to the raw data. This is a good sign for anyone that might attempt to replicate the Lending Club system. Still, this model may need more robust validation than just ANOVA and summary statistics, so it is not a . A confirmation of what we see via PCA analysis might be a good plan as well.
+
+  We also need to study the effect of zip code on the interest rate. While evaluating the summary models, there appeared to be an odd relationship between interest rate and some zip codes in counties in CT and NJ. This quirk is definitely worth exploring.
+
+

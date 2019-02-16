@@ -1,0 +1,85 @@
+projectpath <- "/Users/alpha/Documents/Project Data/"
+lendingdata<- read.csv(paste(projectpath,'Loan.csv',sep = '/'), header=TRUE) #Original file is 396MB
+lendingdict<- read.csv(paste(projectpath, 'LCDataDictionary.csv',sep = '/'), header = TRUE)
+names(lendingdata)
+dim(lendingdata)
+
+
+lendingdata <- lendingdata[,-c(48:74)]
+drops <- c("last_pymnt_d","initial_list_status", "mths_since_last_record","mths_since_last_delinq",
+           "desc", "url","title", "pymnt_plan", "emp_title","id", "member_id", "issue_d", "addr_state") #identify 'useless' columns
+relevent_loan_data <- lendingdata[ , !(names(lendingdata) %in% drops)] #take out 'useless' columns
+dim(relevent_loan_data)
+
+
+drop_after_data<- c("installment","funded_amnt", "funded_amnt_inv", "loan_status", "total_pymnt", "total_pymnt_inv", "total_rec_prncp", "total_rec_int", "tot_rec_late_fee","recoveries", "collection_recovery_fee", "last_pymnt_amnt",
+                    "out_prncp_inv", "out_prncp", "total_rec_late_fee")
+pre_loan_data<- relevent_loan_data [,!(names(relevent_loan_data ) %in% drop_after_data)] #select data before loan given
+pre_loan_data<- na.omit(pre_loan_data)
+dim(pre_loan_data)
+write.csv(pre_loan_data, 'Pre_Loan_Data_Large.csv') # File is now 133MB
+
+
+library(dplyr) # dplyr will enable sample_n function
+pre_loan_data_random<- sample_n(pre_loan_data, 10000) 
+pre_loan_data_random<- na.omit(pre_loan_data_random) #remove NA cells
+pre_loan_data_random<- data.frame(pre_loan_data_random)
+dim(pre_loan_data_random)
+write.csv(pre_loan_data_random, 'Pre_Loan_Data_Sample1.csv')
+
+pre_loan_data_random2<- sample_n(pre_loan_data, 10000) 
+pre_loan_data_random2<- na.omit(pre_loan_data_random2) #remove NA cells
+pre_loan_data_random2<- data.frame(pre_loan_data_random2)
+dim(pre_loan_data_random)
+
+write.csv(pre_loan_data_random2, 'Pre_Loan_Data_Sample2.csv') #Final file is 1.5MB!!
+
+
+model_all<- lm(int_rate ~ ., data = pre_loan_data_random, na.action = na.exclude) #This model takes a long time to run due to all the variables
+#other_model_all<- glm(int_rate ~ ., data = pre_loan_data_random)
+summary(model_all)
+anova(model_all)
+fitted_residuals<- (model_all$residuals)
+plot(model_all$residuals) #ylim = c(-1.5,1.5)
+
+step(other_model_all, direction = "forward")
+step(other_model_all, direction = "backward")
+
+
+aic_model_forward<- lm(int_rate ~ loan_amnt + term + grade + sub_grade + emp_length + 
+                         home_ownership + annual_inc + verification_status + purpose + 
+                         zip_code + dti + delinq_2yrs + earliest_cr_line + inq_last_6mths + 
+                         open_acc + pub_rec + revol_bal + revol_util + total_acc, data = pre_loan_data_random)
+
+aic_model_backward<- lm(int_rate ~ loan_amnt + term + grade + sub_grade + emp_length + 
+                          home_ownership + annual_inc + purpose + 
+                          zip_code + dti + delinq_2yrs + earliest_cr_line + inq_last_6mths + 
+                          open_acc + pub_rec + revol_bal + revol_util + total_acc, data = pre_loan_data_random) #takes out "verification status"
+
+anova(aic_model_forward,aic_model_backward) # so it appears we will go with the backward model
+
+prediction <- predict(aic_model_backward, data = pre_loan_data_random2, na.action = na.action)
+
+#How good is the model - RMSE
+rmse.model<- rmse(pre_loan_data_random2$int_rate, prediction)
+rmse.model
+
+
+RMSE = function(m, o){
+sqrt(mean((m - o)^2))
+}
+RMSE(pre_loan_data_random$int_rate, model_all$fitted.values)
+RMSE(pre_loan_data_random2$int_rate, prediction)
+
+model_all$fitted.values
+
+
+#Does the model work? 
+raw_data_rate<- c(summary(pre_loan_data_random2$int_rate))
+predicted_rate<- c(summary(prediction))
+rbind(raw_data_rate, predicted_rate) #summary comparison
+sd(pre_loan_data_random2$int_rate)
+sd(prediction)
+
+#
+

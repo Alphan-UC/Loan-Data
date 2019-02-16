@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1548737783354.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1526452852",
+    "id" : "879CF2F9",
+    "lastKnownWriteTime" : 1548738081,
+    "last_content_update" : 1548738081908,
+    "path" : "~/Documents/Loan Data/Loan Project Script.R",
+    "project_path" : "Loan Project Script.R",
+    "properties" : {
+        "cursorPosition" : "83,1",
+        "scrollLine" : "64"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
